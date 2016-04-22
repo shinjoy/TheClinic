@@ -1,0 +1,621 @@
+package kr.nomad.mars;
+
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import kr.nomad.util.F;
+import kr.nomad.util.ImageUtil;
+import kr.nomad.util.Response;
+import kr.nomad.util.T;
+import kr.nomad.util.file.UniqFileRenamePolicy;
+
+import javax.imageio.ImageIO;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+import org.apache.poi.ss.util.ImageUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+
+import com.google.gson.Gson;
+import com.oreilly.servlet.MultipartRequest;
+
+import kr.nomad.mars.dao.BbsCommentDao;
+import kr.nomad.mars.dao.BbsDao;
+import kr.nomad.mars.dao.BbsFncDao;
+import kr.nomad.mars.dao.MissionCommentDao;
+import kr.nomad.mars.dao.MissionDao;
+import kr.nomad.mars.dao.UserDao;
+import kr.nomad.mars.dto.Bbs;
+import kr.nomad.mars.dto.BbsComment;
+import kr.nomad.mars.dto.Mission;
+
+
+@Controller
+public class SeverController {
+	
+	private static final Logger logger = LoggerFactory.getLogger(SeverController.class);
+	
+	@Autowired private BbsCommentDao bbsCommentDao;
+	@Autowired private BbsDao bbsDao;
+	@Autowired private BbsFncDao bbsFncDao;
+	@Autowired private UserDao userDao;
+	@Autowired private MissionCommentDao missionCommentDao;
+	@Autowired private MissionDao missionDao;
+	
+	
+	
+	// 페이지당 아이템 갯수
+	@Value("#{config['page.itemCountPerPage']}")
+	int ITEM_COUNT_PER_PAGE;
+
+	// 페이징당 페이지 갯수
+	@Value("#{config['page.pageCountPerPaging']}")
+	int PAGE_COUNT_PER_PAGING;
+
+	// 파일 루트
+	@Value("#{config['file.root']}")
+	String FILE_ROOT;
+
+	String FILE_PATH = "";
+	String FILE_LOCAL_PATH = "";
+
+	// 파일 최대크기(Mb)
+	@Value("#{config['file.maxSize']}")
+	int FILE_MAX_SIZE;
+	
+	
+	@RequestMapping("/api_view.go")
+	public String ApiViewController(
+	        Model model
+	    ) {
+	    return "/api_view";
+	}
+	
+	// 사진 업로드
+	@RequestMapping("/m/photo_upload.go")
+	public String photoUploadController(
+			HttpServletRequest req, HttpServletResponse res, Model model) {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		boolean result = false;
+		
+
+		String FILE_PATH = "/files/temp/";
+		String FILE_LOCAL_PATH = FILE_ROOT + FILE_PATH;
+		String userId = "";
+		String photo = "";
+		String fileName = "";
+		String photoPre = "";
+		String type = "";
+	
+		String orgFileName = "";
+		String yearMonth = "";
+		
+		int fileSize = FILE_MAX_SIZE * 1024 * 1024;
+
+		try {
+			req.setCharacterEncoding("utf-8");
+
+			File file = null;
+			try {
+				
+				MultipartRequest multi = new MultipartRequest(req, FILE_LOCAL_PATH, fileSize, "UTF-8", new UniqFileRenamePolicy());
+
+				// 폼에서 입력한 값을 가져옴
+				userId = F.nullCheck(multi.getParameter("userId"), "");
+				type = F.nullCheck(multi.getParameter("type"), "");
+				
+				Enumeration files = multi.getFileNames();
+				while (files.hasMoreElements()) {
+					String elementName = (String) files.nextElement();
+					file = multi.getFile(elementName);
+					orgFileName = multi.getOriginalFileName(elementName);
+					if (file != null) {
+						photo = file.getName();
+					}
+				}
+				
+			
+				yearMonth = T.getTodayYear()+T.getTodayMonth()+"/";
+					
+				fileName = photo;
+				photoPre = yearMonth;
+				
+				File copyFolder = new File(FILE_ROOT + "/files/"+ type +"/"+photoPre);
+				if (!copyFolder.exists()) {
+					copyFolder.mkdirs();
+				}
+
+				// 파일 복사
+				FileInputStream fis = new FileInputStream(FILE_LOCAL_PATH + photo);
+				FileOutputStream fos = new FileOutputStream(FILE_ROOT + "/files/"+ type +"/"+photoPre+fileName);
+				int data = 0;
+				while((data=fis.read())!=-1) {
+					fos.write(data);
+				}
+				fis.close();
+				fos.close();
+				   
+				
+				// 축소이미지 저장
+				File newFile = new File(FILE_LOCAL_PATH + photo);
+				File thumbFile = new File(FILE_ROOT + "/files/"+ type +"/"+yearMonth +"thumb/"+fileName);
+				if (!thumbFile.exists()) {
+						thumbFile.mkdirs();
+				}
+				try {
+						ImageUtil.resize(newFile, thumbFile, 300, 0);
+						result = true;
+				} catch (IOException e) {
+						e.printStackTrace();
+				}
+				
+				
+			
+				
+				//복사한뒤 원본파일을 삭제함
+				file.delete();
+			} catch (Exception e) {
+				e.getMessage();
+			}
+		
+			
+			map.put("orgFileName", orgFileName);
+			map.put("photo", fileName);
+			map.put("path", "/files/"+ type +"/"+photoPre);
+			map.put("thumb", "/files/"+ type +"/thumb/"+photoPre);
+			map.put("result", true);
+			map.put("message", "사진이 등록되었습니다.");
+			
+		} catch (Exception e) {
+			map.put("result", false);
+			map.put("message", "사진 등록에 실패하였습니다.\n"+e.getMessage());
+		}
+		
+		JSONObject jsonObject = JSONObject.fromObject(map);
+
+		Gson gson = new Gson();
+		String outputstr = gson.toJson(jsonObject);
+		Response.responseWrite(res, outputstr);
+
+		return null;
+	}
+	
+	
+	
+	//다이어리 
+	@RequestMapping("/m/bbs_list.go")
+	public String BbsListController(
+			@RequestParam(value="page", required=false, defaultValue="1") int page,
+			HttpServletResponse res
+		) {
+		
+		List<Bbs> bbsList = null;
+		double bbsCount = 0;
+    	
+
+			bbsList = bbsDao.getBbsList(page, ITEM_COUNT_PER_PAGE);
+			bbsCount = bbsDao.getBbsCount();
+	
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("bbsList", bbsList);
+		map.put("currentPage", page);
+		map.put("itemCount", bbsCount);
+		map.put("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		map.put("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+		
+		JSONObject jsonObject = JSONObject.fromObject(map);
+		
+		Gson gson = new Gson();
+	    String outputstr = gson.toJson(jsonObject);
+		Response.responseWrite(res, outputstr);
+
+		return null;
+	}
+	
+	//다이어리 상세
+	@RequestMapping("/m/bbs_view.go")
+	public String BbsViewController(
+			@RequestParam(value="page", required=false, defaultValue="1") int page,
+			@RequestParam(value="bbsSeq", required=false, defaultValue="0") int bbsSeq,
+			HttpServletResponse res
+		) {
+		
+		
+			Bbs bbs= bbsDao.getBbs(bbsSeq);
+			List commentList = bbsCommentDao.getBbsCommentList(bbs.getBbsSeq(),0,page,ITEM_COUNT_PER_PAGE);
+			int count = bbsCommentDao.getBbsCommentCount(bbsSeq,0);
+			bbs.setCommentList(commentList);
+	
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("bbs", bbs);
+		map.put("currentPage", page);
+		map.put("itemCount", count);
+		map.put("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		map.put("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+		
+		JSONObject jsonObject = JSONObject.fromObject(map);
+		
+		Gson gson = new Gson();
+	    String outputstr = gson.toJson(jsonObject);
+		Response.responseWrite(res, outputstr);
+
+		return null;
+	}
+
+	// 다이어리 댓글 상세
+	@RequestMapping("/m/bbs_comment_view.go")
+	public String BbsCommentController(
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			@RequestParam(value = "bbsSeq", required = false, defaultValue = "0") int bbsSeq, 
+			@RequestParam(value="bbsCommentSeq", required=false, defaultValue="0") int bbsCommentSeq,
+			HttpServletResponse res) {
+
+		BbsComment bc = bbsCommentDao.getBbsComment(bbsCommentSeq);
+		List commentList = bbsCommentDao.getBbsCommentList(bc.getBbsSeq(),bbsCommentSeq, page, ITEM_COUNT_PER_PAGE);
+		int count = bbsCommentDao.getBbsCommentCount(bbsSeq, bbsCommentSeq);
+		bc.setCommentList(commentList);
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("bc", bc);
+		map.put("currentPage", page);
+		map.put("itemCount", count);
+		map.put("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		map.put("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+
+		JSONObject jsonObject = JSONObject.fromObject(map);
+
+		Gson gson = new Gson();
+		String outputstr = gson.toJson(jsonObject);
+		Response.responseWrite(res, outputstr);
+
+		return null;
+	}
+	
+	// 다이어리 쓰기 수정
+	@RequestMapping("/m/bbs_edit.go")
+	public String BbsEditController(
+			@RequestParam(value = "bbsSeq", required = false, defaultValue = "0") int bbsSeq, 
+			@RequestParam(value = "userId", required = false, defaultValue = "") String userId, 
+			@RequestParam(value="bbsHeader", required=false, defaultValue="") String bbsHeader,
+			@RequestParam(value="bbsTitle", required=false, defaultValue="") String bbsTitle,
+			@RequestParam(value="contents", required=false, defaultValue="") String contents,
+			@RequestParam(value="photo", required=false, defaultValue="") String photo,
+			@RequestParam(value="thumb", required=false, defaultValue="") String thumb,
+			@RequestParam(value="linkUrl", required=false, defaultValue="1") String linkUrl,
+	
+			HttpServletResponse res) {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		boolean result =false;
+		String message ="";
+		try{
+			FILE_LOCAL_PATH = FILE_ROOT ;
+			String [] photoArr = photo.split(",");
+			String photoString="";
+			if(photoArr.length>1){
+				photoString = fileJson(photo, thumb);
+			}
+			
+			Bbs bbs=null;
+			String beforefile="";
+			int beforecount =0;
+			if(bbsSeq <1){//등록
+				bbs = new Bbs();
+				bbs.setUserId(userId);
+				bbs.setBbsContents(contents);
+				bbs.setBbsTitle(bbsTitle);
+				bbs.setLinkUrl(linkUrl);
+				bbs.setBbsHeader(bbsHeader);
+				bbs.setFiles(photoString);
+				bbs.setFileCount(photoArr.length-1);
+				bbsDao.addBbs(bbs);
+				result=true;
+			
+			}else{
+				bbs=bbsDao.getBbs(bbsSeq);
+				beforefile =bbs.getFiles();
+				beforecount=bbs.getFileCount();
+				bbs.setUserId(userId);
+				bbs.setBbsContents(contents);
+				bbs.setBbsTitle(bbsTitle);
+				bbs.setLinkUrl(linkUrl);
+				bbs.setBbsHeader(bbsHeader);
+				bbs.setFiles(photoString);
+				bbs.setFileCount(photoArr.length-1);
+				bbsDao.updateBbs(bbs);
+				result=true;
+			
+			}
+			
+			if(!beforefile.equals("")){
+				filedelete(beforefile);
+			}
+			map.put("result", result);
+			map.put("message", "complete");
+		}catch(Exception e){
+			map.put("result", result);
+			map.put("message", e.getMessage());
+		}
+	
+		JSONObject jsonObject = JSONObject.fromObject(map);
+
+		Gson gson = new Gson();
+		String outputstr = gson.toJson(jsonObject);
+		Response.responseWrite(res, outputstr);
+
+		return null;
+	}
+	
+	// 다이어리 댓글 쓰기 수정
+		@RequestMapping("/m/bbs_comment_edit.go")
+		public String BbsCommentEditController(
+				@RequestParam(value = "bbsSeq", required = false, defaultValue = "0") int bbsSeq, 
+				@RequestParam(value = "bbsCommentSeq", required = false, defaultValue = "0") int bbsCommentSeq, 
+				@RequestParam(value = "userId", required = false, defaultValue = "") String userId, 
+				@RequestParam(value="bbsHeader", required=false, defaultValue="") String bbsHeader,
+				@RequestParam(value="bbsTitle", required=false, defaultValue="") String bbsTitle,
+				@RequestParam(value="contents", required=false, defaultValue="") String bbsContents,
+				@RequestParam(value="photo", required=false, defaultValue="") String photo,
+				@RequestParam(value="thumb", required=false, defaultValue="") String thumb,
+				@RequestParam(value="linkUrl", required=false, defaultValue="") String linkUrl,
+				@RequestParam(value="rlevel", required=false, defaultValue="0") int rlevel,//댓글 0 댓글의댓글 1 이상
+				@RequestParam(value="rCommentSeq", required=false, defaultValue="0") int rCommentSeq,
+				HttpServletResponse res) {
+
+			Map<String, Object> map = new HashMap<String, Object>();
+			boolean result =false;
+			String message ="";
+			try{
+				FILE_LOCAL_PATH = FILE_ROOT ;
+				
+				String [] photoArr = photo.split(",");
+				String photoString="";
+				if(photoArr.length>1){
+					photoString = fileJson(photo, thumb);
+				}
+			
+				
+				BbsComment bc=null;
+				String beforefile="";
+				int beforecount =0;
+				if(bbsCommentSeq <1){//등록
+					bc = new BbsComment();
+					bc.setUserId(userId);
+					bc.setBbsContents(bbsContents);
+					bc.setBbsTitle(bbsTitle);
+					bc.setLinkUrl(linkUrl);
+					bc.setBbsHeader(bbsHeader);
+					bc.setFiles(photoString);
+					bc.setFileCount(photoArr.length-1);
+					bc.setRLevel(rlevel);
+					bc.setBbsSeq(bbsSeq);
+					bc.setRCommentSeq(rCommentSeq);
+					bbsCommentDao.addBbsComment(bc);
+					result=true;
+				
+				}else{
+					bc=bbsCommentDao.getBbsComment(bbsCommentSeq);
+					beforefile =bc.getFiles();
+					beforecount=bc.getFileCount();
+					bc.setUserId(userId);
+					bc.setBbsContents(bbsContents);
+					bc.setBbsTitle(bbsTitle);
+					bc.setLinkUrl(linkUrl);
+					bc.setBbsHeader(bbsHeader);
+					bc.setFiles(photoString);
+					bc.setFileCount(photoArr.length-1);
+					bc.setRLevel(rlevel);
+					bc.setBbsSeq(bbsSeq);
+					bc.setRCommentSeq(rCommentSeq);
+					bbsCommentDao.updateBbsComment(bc);
+					result=true;
+				
+				}
+				
+				if(!beforefile.equals("")){
+					filedelete(beforefile);
+				}
+				map.put("result", result);
+				map.put("message", "complete");
+			}catch(Exception e){
+				map.put("result", result);
+				map.put("message", e.getMessage());
+			}
+		
+			JSONObject jsonObject = JSONObject.fromObject(map);
+
+			Gson gson = new Gson();
+			String outputstr = gson.toJson(jsonObject);
+			Response.responseWrite(res, outputstr);
+
+			return null;
+		}
+		
+		// 다이어리 삭제
+		@RequestMapping("/m/bbs_delete.go")
+		public String bbsdelController(Model model, HttpServletResponse res, HttpSession session,
+				@RequestParam(value = "userId", required = false, defaultValue = "") String userId,
+				@RequestParam(value = "bbsSeq", required = false, defaultValue = "0") int bbsSeq,
+				@RequestParam(value = "bbsCommentSeq", required = false, defaultValue = "0") int bbsCommentSeq
+				) {
+
+			Map<String, Object> map = new HashMap<String, Object>();
+			try {
+
+				if (bbsCommentSeq == 0) { // 본글 삭제
+
+						Bbs bbs = bbsDao.getBbs(bbsSeq);
+						if (bbs.getFileCount() != 0) {
+							String files = bbs.getFiles();
+							filedelete(files);
+						}
+						// 댓글 전체 가져오기
+						List<BbsComment> list = bbsCommentDao.getBbsCommentListAll(bbsSeq);
+						
+						for(int i=0;i<list.size();i++){
+							BbsComment bc = list.get(i);
+							if (bc.getFileCount() != 0) {
+							 filedelete(bc.getFiles());
+							}
+							
+						}
+						bbsDao.deleteBbs(bbsSeq);
+						bbsCommentDao.deleteBbsCommentAll(bbsSeq);
+					} else {// 댓글 삭제
+						BbsComment bbsc = bbsCommentDao.getBbsComment(bbsCommentSeq);
+						if (bbsc.getFileCount() != 0) {
+							filedelete(bbsc.getFiles());
+						}
+						List <BbsComment> comment=bbsCommentDao.getBbsCommentListComment(bbsCommentSeq);
+						for(int i=0;i<comment.size();i++){
+							BbsComment bcomment=comment.get(i);
+							if (bcomment.getFileCount() != 0) {
+								 filedelete(bcomment.getFiles());
+							}
+						}
+						
+						bbsCommentDao.deleteBbsComment(bbsCommentSeq);
+						bbsCommentDao.deleteRBbsComment(bbsCommentSeq);
+					
+					}
+
+					map.put("message", "complete");
+					map.put("result", true);
+
+			} catch (Exception e) {
+
+				map.put("result", false);
+				map.put("message", e.getMessage());
+
+			}
+
+			JSONObject jsonObject = JSONObject.fromObject(map);
+			Response.responseWrite(res, jsonObject);
+			return null;
+		}
+		
+		/*//미션
+		@RequestMapping("/m/mission_list.go")
+		public String MissionListController(
+				@RequestParam(value="page", required=false, defaultValue="1") int page,
+			
+				HttpServletResponse res
+			) {
+			
+			List<Mission> missionList = null;
+			double missionCount = 0;
+	    	
+
+			missionList =missionDao.getMissionList(page, ITEM_COUNT_PER_PAGE);
+					
+			missionCount = missionDao.getMissionCount();
+		
+
+			Map<String, Object> map = new HashMap<String, Object>();
+			map.put("bbsList", missionList);
+			map.put("currentPage", page);
+			map.put("itemCount", missionCount);
+			map.put("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+			map.put("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+			
+			JSONObject jsonObject = JSONObject.fromObject(map);
+			
+			Gson gson = new Gson();
+		    String outputstr = gson.toJson(jsonObject);
+			Response.responseWrite(res, outputstr);
+
+			return null;
+		}
+		
+		*/
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		///////////////////////////////////////////////////////////////////
+		
+		String fileJson(String photo,String thumb) throws IOException{
+		
+			JSONObject jObject = new JSONObject();
+			JSONArray jsArray = new JSONArray();
+			
+			String[] photoArr = photo.split(",");
+			String[] thumbArr = thumb.split(",");
+			String photoString="";
+			if(!photo.equals("")){
+				for (int i=0; i<photoArr.length; i++) {
+					if(photoArr[i]!=""&&thumbArr[i]!=""){
+						BufferedImage bi = ImageIO.read(new File(FILE_LOCAL_PATH + photoArr[i]));
+						int width=bi.getWidth();
+						int height=bi.getHeight();
+						
+						JSONObject jItem = new JSONObject();
+						jItem.put("type", "img");
+						jItem.put("width", width);
+						jItem.put("height", height);
+						jItem.put("thumb", thumbArr[i]);
+						jItem.put("file", photoArr[i]);	
+						jsArray.add(jItem);
+					}
+				}
+				jObject.put("items", jsArray);
+				photoString = jObject.toString();
+			}
+			
+			return photoString;
+			
+		}
+		
+		void filedelete(String beforefile)throws IOException{
+			
+			JSONObject fileObj = JSONObject.fromObject(beforefile);
+			JSONArray fileList = fileObj.getJSONArray("items");
+			for(int i=0;i<fileList.size();i++){
+					JSONObject fileNames=(JSONObject)fileList.get(i);
+					String fileOrg = fileNames.getString("file");
+					String fileThumb = fileNames.getString("thumb");
+					
+					FILE_LOCAL_PATH = FILE_ROOT;
+					File file = new File(FILE_LOCAL_PATH + fileOrg);
+					file.delete();
+	
+					File file2 = new File(FILE_LOCAL_PATH + fileThumb);
+					file2.delete();
+					
+		
+			}
+		}
+		
+	
+	
+}

@@ -1,0 +1,904 @@
+package kr.nomad.mars;
+
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.text.DateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import kr.nomad.util.F;
+import kr.nomad.util.FileWrite;
+import kr.nomad.util.ImageUtil;
+import kr.nomad.util.Paging;
+import kr.nomad.util.Response;
+import kr.nomad.util.T;
+import kr.nomad.util.file.UniqFileRenamePolicy;
+
+import javax.imageio.ImageIO;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+import org.apache.poi.ss.util.ImageUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+
+import com.google.gson.Gson;
+import com.oreilly.servlet.MultipartRequest;
+
+import kr.nomad.mars.dao.BbsCommentDao;
+import kr.nomad.mars.dao.BbsDao;
+import kr.nomad.mars.dao.BbsFncDao;
+import kr.nomad.mars.dao.MissionCommentDao;
+import kr.nomad.mars.dao.MissionDao;
+import kr.nomad.mars.dao.MissionUserDao;
+import kr.nomad.mars.dao.NoticeDao;
+import kr.nomad.mars.dao.UserDao;
+import kr.nomad.mars.dto.Bbs;
+import kr.nomad.mars.dto.BbsComment;
+import kr.nomad.mars.dto.BbsFnc;
+import kr.nomad.mars.dto.Mission;
+import kr.nomad.mars.dto.MissionComment;
+import kr.nomad.mars.dto.MissionUser;
+import kr.nomad.mars.dto.Notice;
+import kr.nomad.mars.dto.User;
+
+
+@Controller
+public class AdminController {
+	
+	private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
+	
+	@Autowired private BbsCommentDao bbsCommentDao;
+	@Autowired private BbsDao bbsDao;
+	@Autowired private BbsFncDao bbsFncDao;
+	@Autowired private UserDao userDao;
+	@Autowired private MissionCommentDao missionCommentDao;
+	@Autowired private MissionDao missionDao;
+	@Autowired private MissionUserDao missionUserDao;
+	@Autowired NoticeDao noticeDao;
+	
+	
+	
+	// 페이지당 아이템 갯수
+	@Value("#{config['page.itemCountPerPage']}")
+	int ITEM_COUNT_PER_PAGE;
+
+	// 페이징당 페이지 갯수
+	@Value("#{config['page.pageCountPerPaging']}")
+	int PAGE_COUNT_PER_PAGING;
+
+	// 파일 루트
+	@Value("#{config['file.root']}")
+	String FILE_ROOT;
+
+	String FILE_PATH = "";
+	String FILE_LOCAL_PATH = "";
+
+	// 파일 최대크기(Mb)
+	@Value("#{config['file.maxSize']}")
+	int FILE_MAX_SIZE;
+	
+
+
+	// 관리자 헤더 count
+	@RequestMapping("/admin/count.go")
+	public String adminCountController(HttpSession session, Model model, HttpServletResponse res) {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		boolean result = true;
+		String message = "";
+
+		int Count = userDao.getUserCount("",0);
+		int accessCount = userDao.getUserAccessCount();
+		int missionCount = missionDao.getActiveCount();
+		
+		map.put("Count", Count);
+		map.put("accessCount", accessCount);
+		map.put("missionCount", missionCount);
+		
+
+		JSONObject jsonObject = JSONObject.fromObject(map);
+		Response.responseWrite(res, jsonObject);
+
+		return null;
+
+	}
+	
+	// 관리자 메인
+	@RequestMapping("/admin/main.go")
+	public String adminMainController(HttpSession session, Model model) {
+
+		List<User> user = null;
+		List<Mission> list = null;
+
+		int topCount = 5;
+
+		user = userDao.getUserListTop(topCount);
+		
+		list=missionDao.getMissionListTop(topCount);
+		List fileList = new ArrayList<>();
+		for(Mission ms : list){
+			if(!ms.getFileName().equals("")){
+				 String files = ms.getFileName();
+				 JSONObject fileObj = JSONObject.fromObject(files);
+				 fileList.add(fileObj);
+			}else{
+				fileList.add("");
+			}
+		}
+		model.addAttribute("fileList", fileList);
+		model.addAttribute("user", user);
+		model.addAttribute("mission", list);
+
+		return "/admin/main";
+	}
+
+	/////////회원목록
+	// 회원조회
+	@RequestMapping("/admin/user/user.go")
+	public String userController(
+			
+			HttpSession session, Model model){
+		
+		
+		
+			return "/admin/user/user";
+	}
+	
+	// 회원조회
+	@RequestMapping("/admin/user/user_list.go")
+	public String userListController(
+			@RequestParam(value = "page", required = false, defaultValue = "0") int page,
+			@RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
+			@RequestParam(value = "gender", required = false, defaultValue = "1") int gender,
+		
+			@RequestParam(value = "colname", required = false, defaultValue = "") String colname,
+			@RequestParam(value = "sort", required = false, defaultValue = "") String sort,
+			HttpSession session, Model model) {
+		
+		
+		List<User>list = userDao.getUserList(keyword,gender,sort,colname,page, ITEM_COUNT_PER_PAGE);
+		int count = userDao.getUserCount(keyword,gender);
+		
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+		Map<String, Object> map = new HashMap<String, Object>();
+
+	
+		model.addAttribute("list", list);
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+		return "/admin/user/user_list";
+	}
+	
+	// 회원상세보기
+	@RequestMapping("/admin/user/user_view.go")
+	public String userViewController(
+		@RequestParam(value = "userId", required = false, defaultValue = "") String userId,
+		HttpSession session, Model model) {
+		
+		User user = userDao.getUser(userId);
+
+		model.addAttribute("user", user);
+	
+		return "/admin/user/user_view";
+	}
+	// 회원수정
+	@RequestMapping("/admin/user/user_edit.go")
+	public String userEditController(
+		@RequestParam(value = "userId", required = false, defaultValue = "") String userId,
+		HttpSession session, Model model) {
+		
+		User user = userDao.getUser(userId);
+
+		model.addAttribute("user", user);
+	
+		return "/admin/user/user_edit";
+	}
+	
+	
+	// 다이어리
+	@RequestMapping("/admin/user/user_diary.go")
+	public String userDiaryController(
+			@RequestParam(value = "userId", required = false, defaultValue = "") String userId,
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			HttpSession session, Model model) {
+		//String userId,String keyword,String startDate,String endDate,int gender
+		List<Bbs> list = bbsDao.getBbsList(userId,"","","",0, page, ITEM_COUNT_PER_PAGE);
+		int count = bbsDao.getBbsCount(userId,"","","",0);
+		User user = userDao.getUser(userId);
+		List fileList = new ArrayList<>();
+		for(Bbs bbs : list){
+			if(!bbs.getFiles().equals("")){
+				 String files = bbs.getFiles();
+				 JSONObject fileObj = JSONObject.fromObject(files);
+				 fileList.add(fileObj);
+			}else{
+				fileList.add("");
+			}
+		}
+		model.addAttribute("fileList", fileList);
+		
+		model.addAttribute("user", user);
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+		Map<String, Object> map = new HashMap<String, Object>();
+
+		model.addAttribute("list", list);
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+
+		return "/admin/user/user_diary";
+	}
+	
+	// 참여중 미션
+	@RequestMapping("/admin/user/user_mission.go")
+	public String userMissionController(
+		@RequestParam(value = "userId", required = false, defaultValue = "") String userId,
+		@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+	
+		HttpSession session, Model model) {
+		
+		List <Mission>list = missionDao.getMissionMyList(userId, page, ITEM_COUNT_PER_PAGE);
+		int count = missionDao.getMissionMyCount(userId);
+		User user = userDao.getUser(userId);
+
+		model.addAttribute("user", user);
+		List fileList = new ArrayList<>();
+		for(Mission ms : list){
+			if(!ms.getFileName().equals("")){
+				 String files = ms.getFileName();
+				 JSONObject fileObj = JSONObject.fromObject(files);
+				 fileList.add(fileObj);
+			}else{
+				fileList.add("");
+			}
+		}
+		model.addAttribute("fileList", fileList);
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+		Map<String, Object> map = new HashMap<String, Object>();
+
+	
+		model.addAttribute("list", list);
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+		
+		return "/admin/user/user_mission";
+	}
+
+	////////////////////다이어리관리
+	
+	// 다이어리
+	@RequestMapping("/admin/diary/diary.go")
+	public String DiaryController(
+		HttpSession session, Model model) {
+
+	
+
+		return "/admin/diary/diary";
+	}
+	
+/*	keyword		: 	listForm.keyword.value,
+	gender : listForm.gender.value,
+	startDate   :   listForm.startDate.value,
+	endDate     :   listForm.endDate.value,
+	page		:	page*/
+	
+	
+	// 다이어리
+	@RequestMapping("/admin/diary/diary_list.go")
+	public String DiaryListController(
+			@RequestParam(value = "userId", required = false, defaultValue = "") String userId,
+			@RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
+			@RequestParam(value = "startDate", required = false, defaultValue = "") String startDate,
+			@RequestParam(value = "endDate", required = false, defaultValue = "") String endDate,
+			@RequestParam(value = "gender", required = false, defaultValue = "") int gender,
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			HttpSession session, Model model) {
+		//String userId,String keyword,String startDate,String endDate,int gender
+		List<Bbs> list = bbsDao.getBbsList("",keyword,startDate,endDate,gender,page, ITEM_COUNT_PER_PAGE);
+		int count = bbsDao.getBbsCount("",keyword,startDate,endDate,gender);
+	
+		List fileList = new ArrayList<>();
+		for(Bbs bbs : list){
+			if(!bbs.getFiles().equals("")){
+				 String files = bbs.getFiles();
+				 JSONObject fileObj = JSONObject.fromObject(files);
+				 fileList.add(fileObj);
+			}else{
+				fileList.add("");
+			}
+		}
+		model.addAttribute("fileList", fileList);
+		
+	
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+
+
+		model.addAttribute("list", list);
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+
+		return "/admin/diary/diary_list";
+	}
+	
+	// 다이어리 상세보기
+	@RequestMapping("/admin/diary/diary_view.go")
+	public String DiaryViewController(
+			@RequestParam(value = "bbsSeq", required = false, defaultValue = "0") int bbsSeq,
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			HttpSession session,
+			Model model) {
+		
+		
+		Bbs bbs= bbsDao.getBbs(bbsSeq);
+		List<BbsComment> commentList = bbsCommentDao.getBbsCommentAdminList(bbs.getBbsSeq(),page,ITEM_COUNT_PER_PAGE);
+		int count = bbsCommentDao.getBbsCommentAdminCount(bbsSeq);
+		bbs.setCommentList(commentList);
+
+		List fileList = new ArrayList<>();
+		
+			if (!bbs.getFiles().equals("")) {
+				String files = bbs.getFiles();
+				JSONObject fileObj = JSONObject.fromObject(files);
+				fileList.add(fileObj);
+			} else {
+				fileList.add("");
+			}
+	
+		
+		List fileList2 = new ArrayList<>();
+		for (BbsComment bc : commentList) {
+			if (!bc.getFiles().equals("")) {
+				String files = bc.getFiles();
+				JSONObject fileObj = JSONObject.fromObject(files);
+				fileList2.add(fileObj);
+			} else {
+				fileList2.add("");
+			}
+		}
+		model.addAttribute("fileList", fileList);
+
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+	
+		model.addAttribute("bbs", bbs);
+		model.addAttribute("list", commentList);
+		model.addAttribute("fileList", fileList);
+		model.addAttribute("fileList2", fileList2);
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+
+		return "/admin/diary/diary_view";
+	}
+	
+	///////////////////////////미션관리
+	// 미션
+	@RequestMapping("/admin/mission/mission.go")
+	public String MissionController(
+		HttpSession session, Model model) {
+
+	
+
+		return "/admin/mission/mission";
+	}
+	
+	// 미션 리스트
+	@RequestMapping("/admin/mission/mission_list.go")
+	public String MissionListController(
+		@RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
+		@RequestParam(value = "startDate", required = false, defaultValue = "") String startDate,
+		@RequestParam(value = "endDate", required = false, defaultValue = "") String endDate,
+		@RequestParam(value = "colname", required = false, defaultValue = "") String colname,
+		@RequestParam(value = "sort", required = false, defaultValue = "") String sort,
+		@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+		HttpSession session, Model model) {
+		List<Mission> missionList = null;
+		int missionCount=0;
+		
+		missionList = missionDao.getMissionList(keyword,startDate,endDate,colname,sort,page, ITEM_COUNT_PER_PAGE);
+		missionCount = missionDao.getMissionCount(keyword,startDate,endDate);
+		List fileList = new ArrayList<>();
+		
+		for(Mission ms : missionList){
+			if (!ms.getFileName().equals("")) {
+				String files = ms.getFileName();
+				JSONObject fileObj = JSONObject.fromObject(files);
+				fileList.add(fileObj);
+			} else {
+				fileList.add("");
+			}
+		}
+		// 페이징
+		String paging = Paging.getPaging(page, missionCount, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+			
+	
+		model.addAttribute("list", missionList);
+		model.addAttribute("fileList", fileList);
+		
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", missionCount);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);	
+		
+		return "/admin/mission/mission_list";
+	}
+	
+	// 미션 상세보기
+	@RequestMapping("/admin/mission/mission_view.go")
+	public String MissionViewController(
+			@RequestParam(value = "missionSeq", required = false, defaultValue = "0") int missionSeq,
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			HttpSession session,
+			Model model) {
+		
+		
+		Mission ms = missionDao.getMission(missionSeq);
+		List<MissionComment>commentList = missionCommentDao.getMissionList(missionSeq, page, ITEM_COUNT_PER_PAGE);
+		int count = missionCommentDao.getMissionCount(missionSeq);
+		ms.setCommentList(commentList);
+
+		List fileList = new ArrayList<>();
+		
+			if (!ms.getFileName().equals("")) {
+				String files = ms.getFileName();
+				JSONObject fileObj = JSONObject.fromObject(files);
+				fileList.add(fileObj);
+			} else {
+				fileList.add("");
+			}
+	
+		
+		List fileList2 = new ArrayList<>();
+		for (MissionComment mc : commentList) {
+			if (!mc.getFiles().equals("")) {
+				String files = mc.getFiles();
+				JSONObject fileObj = JSONObject.fromObject(files);
+				fileList2.add(fileObj);
+			} else {
+				fileList2.add("");
+			}
+		}
+		
+
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+	
+		model.addAttribute("mission", ms);
+		model.addAttribute("list", commentList);
+		model.addAttribute("fileList", fileList);
+		model.addAttribute("fileList2", fileList2);
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+
+		return "/admin/mission/mission_view";
+	}
+	
+	// 미션 참여중 멤버
+	@RequestMapping("/admin/mission/mission_member.go")
+	public String MissionMemberController(
+			@RequestParam(value = "missionSeq", required = false, defaultValue = "0") int missionSeq,
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			HttpSession session,
+			Model model) {
+		
+		
+		Mission ms = missionDao.getMission(missionSeq);
+		
+		List<User>list = missionUserDao.getMissionUserList(missionSeq, page, ITEM_COUNT_PER_PAGE);
+		int count = missionUserDao.getMissionUserCount(missionSeq);
+		List fileList = new ArrayList<>();
+		
+			if (!ms.getFileName().equals("")) {
+				String files = ms.getFileName();
+				JSONObject fileObj = JSONObject.fromObject(files);
+				fileList.add(fileObj);
+			} else {
+				fileList.add("");
+			}
+	
+		
+
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+	
+		model.addAttribute("mission", ms);
+		model.addAttribute("list", list);
+		model.addAttribute("fileList", fileList);
+	
+		model.addAttribute("paging", paging);
+		model.addAttribute("currentPage", page);
+		model.addAttribute("itemCount", count);
+		model.addAttribute("ITEM_COUNT_PER_PAGE", ITEM_COUNT_PER_PAGE);
+		model.addAttribute("PAGE_COUNT_PER_PAGING", PAGE_COUNT_PER_PAGING);
+
+		return "/admin/mission/mission_member";
+	}
+	
+	
+	
+	
+	// 미션 수정 화면이동 
+	@RequestMapping("/admin/mission/mission_edit.go")
+	public String MissionEditController(
+		@RequestParam(value = "missionSeq", required = false, defaultValue = "0") int missionSeq,
+		HttpSession session, Model model) {
+		Mission ms=missionDao.getMission(missionSeq);
+		model.addAttribute("mission", ms);
+		List fileList= new ArrayList();
+
+		if (!ms.getFileName().equals("")) {
+			String files = ms.getFileName();
+			JSONObject fileObj = JSONObject.fromObject(files);
+			fileList.add(fileObj);
+		} else {
+			fileList.add("");
+		}
+		model.addAttribute("fileList", fileList);
+		
+		
+		
+		return "/admin/mission/mission_edit";
+	}
+	
+	
+	// 미션 등록/수정
+	@RequestMapping("/admin/mission/mission_edit_do.go")
+	public String MissionEditController(
+		@RequestParam(value = "missionSeq", required = false, defaultValue = "0") int missionSeq,
+		@RequestParam(value = "missionPushTime", required = false, defaultValue = "") String missionPushTime,
+		@RequestParam(value = "title", required = false, defaultValue = "") String title,
+		@RequestParam(value = "contentsText", required = false, defaultValue = "") String contentsText,
+		
+		
+		@RequestParam(value = "photo", required = false, defaultValue = "") String photo,
+		@RequestParam(value = "thumb", required = false, defaultValue = "") String thumb,
+		@RequestParam(value = "missionStartDate", required = false, defaultValue = "") String missionStartDate,
+		@RequestParam(value = "missionEndDate", required = false, defaultValue = "") String missionEndDate,
+		@RequestParam(value = "missionPushDate1", required = false, defaultValue = "0") int missionPushDate1,
+		@RequestParam(value = "missionPushDate2", required = false, defaultValue = "0") int missionPushDate2,
+		@RequestParam(value = "missionPushDate3", required = false, defaultValue = "0") int missionPushDate3,
+		@RequestParam(value = "missionPushDate4", required = false, defaultValue = "0") int missionPushDate4,
+		@RequestParam(value = "missionPushDate5", required = false, defaultValue = "0") int missionPushDate5,
+		@RequestParam(value = "missionPushDate6", required = false, defaultValue = "0") int missionPushDate6,
+		@RequestParam(value = "missionPushDate7", required = false, defaultValue = "0") int missionPushDate7,
+		HttpServletResponse res,HttpSession hs) {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		boolean result =false;
+		String message ="";
+		try{
+			String userId = (String)hs.getAttribute("USER_ID");
+			FILE_LOCAL_PATH = FILE_ROOT ;
+			String [] photoArr = photo.split(",");
+			String photoString="";
+			if(photoArr.length>0){
+				photoString = fileJson(photo, thumb);
+			}
+			
+			Mission ms=null;
+			String beforefile="";
+			int beforecount =0;
+			if(missionSeq <1){//등록
+				ms = new Mission();
+				ms.setUserId(userId);
+				ms.setSendPush(1);
+				ms.setTitle(title);
+				ms.setContentsText(contentsText);
+				ms.setFileName(photoString);
+				ms.setMissionStartDate(missionStartDate);
+				ms.setMissionEndDate(missionEndDate);
+				ms.setMissionPushTime(missionPushTime);
+				ms.setMissionPushDate1(missionPushDate1);
+				ms.setMissionPushDate2(missionPushDate2);
+				ms.setMissionPushDate3(missionPushDate3);
+				ms.setMissionPushDate4(missionPushDate4);
+				ms.setMissionPushDate5(missionPushDate5);
+				ms.setMissionPushDate6(missionPushDate6);
+				ms.setMissionPushDate7(missionPushDate7);
+				missionDao.addMission(ms);
+				result=true;
+			
+			}else{
+				ms=missionDao.getMission(missionSeq);
+				beforefile =ms.getFileName();
+		
+				ms.setUserId(userId);
+			
+				ms.setTitle(title);
+				ms.setContentsText(contentsText);
+				ms.setFileName(photoString);
+				
+				ms.setMissionStartDate(missionStartDate);
+				ms.setMissionEndDate(missionEndDate);
+				ms.setMissionPushTime(missionPushTime);
+				ms.setMissionPushDate1(missionPushDate1);
+				ms.setMissionPushDate2(missionPushDate2);
+				ms.setMissionPushDate3(missionPushDate3);
+				ms.setMissionPushDate4(missionPushDate4);
+				ms.setMissionPushDate5(missionPushDate5);
+				ms.setMissionPushDate6(missionPushDate6);
+				ms.setMissionPushDate7(missionPushDate7);
+				missionDao.updateMission(ms);
+				result=true;
+			
+			}
+			if(!beforefile.equals(photoString)){
+				if(!beforefile.equals("")){
+					filedelete(beforefile);
+				}
+			}
+			
+			
+			map.put("result", result);
+			map.put("message", "complete");
+		}catch(Exception e){
+			map.put("result", result);
+			map.put("message", e.getMessage());
+		}
+	
+		JSONObject jsonObject = JSONObject.fromObject(map);
+		Response.responseWrite(res, jsonObject);
+
+		return null;
+	}
+
+
+	
+
+
+	// 공지사항
+	@RequestMapping("/admin/notice/notice.go")
+	public String noticeController(@RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
+			HttpSession session, Model model) {
+
+		return "/admin/notice/notice";
+	}
+
+	// 공지사항 리스트
+
+	@RequestMapping("/admin/notice/notice_list.go")
+	public String noticeListController(
+			@RequestParam(value = "page", required = false, defaultValue = "1") int page,
+			@RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
+			HttpSession session,
+			Model model) {
+
+		List<Notice> list = null;
+		int count = 0;
+
+		list = noticeDao.getNoticeMainList(keyword,page, ITEM_COUNT_PER_PAGE, 0);
+		count = noticeDao.getNoticeMainCount(keyword,0);
+
+		// 페이징
+		String paging = Paging.getPaging(page, count, ITEM_COUNT_PER_PAGE, PAGE_COUNT_PER_PAGING);
+
+		model.addAttribute("list", list);
+		model.addAttribute("paging", paging);
+		model.addAttribute("keyword", keyword);
+		model.addAttribute("currentPage", page);
+		return "admin/notice/notice_list";
+	}
+
+	// 공지사항 등록/수정
+	@RequestMapping("/admin/notice/notice_edit.go")
+	public String noticeEditController(
+			@RequestParam(value = "noticeSeq", required = false, defaultValue = "0") int noticeSeq, Model model) {
+
+		Notice notice = null;
+		if (noticeSeq == 0) {
+			notice = new Notice();
+		} else {
+			notice = noticeDao.getNotice(noticeSeq);
+		}
+
+		model.addAttribute("notice", notice);
+
+		return "admin/notice/notice_edit";
+	}
+
+	// 공지사항 수정의 처리
+	@RequestMapping("/admin/notice/notice_edit_do.go")
+	public String noticeEditDoController(HttpServletRequest req,
+			@RequestParam(value = "noticeSeq", required = false, defaultValue = "0") int noticeSeq,
+			
+			@RequestParam(value = "startDate", required = false, defaultValue = "") String startDate,
+			@RequestParam(value = "endDate", required = false, defaultValue = "") String endDate,
+			@RequestParam(value = "notiType", required = false, defaultValue = "0") int notiType,
+			@RequestParam(value = "sendPush", required = false, defaultValue = "0") int sendPush,
+			@RequestParam(value = "title", required = false, defaultValue = "") String title,
+			@RequestParam(value = "ir1", required = false, defaultValue = "") String contentsHtml,
+			@RequestParam(value = "language", required = false, defaultValue = "") String language,
+			@RequestParam(value = "ir1_text", required = false, defaultValue = "") String contentsText,
+			HttpServletResponse res, Model model,HttpSession hs) throws IllegalStateException, IOException {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		boolean result = true;
+		String message = "";
+		List<User> list = null;
+		String userId = (String)hs.getAttribute("USER_ID");
+
+		try {
+			if (noticeSeq == 0) {
+				Notice notice = new Notice();
+				notice.setUserId(userId);
+				notice.setTitle(title);
+				notice.setStartDate(startDate);
+				notice.setEndDate(endDate);
+				notice.setNotiType(notiType);
+				notice.setSendPush(sendPush);
+				notice.setContentsHtml(contentsHtml);
+				notice.setContentsText(contentsText);
+				noticeDao.addNotice(notice);
+				noticeSeq = noticeDao.getLastSeq();
+
+		
+				result = true;
+				message = "등록되었습니다.";
+
+			} else {
+				Notice notice = noticeDao.getNotice(noticeSeq);
+
+				notice.setUserId(userId);
+				notice.setTitle(title);
+				notice.setStartDate(startDate);
+				notice.setEndDate(endDate);
+				notice.setNotiType(notiType);
+				notice.setSendPush(sendPush);
+				notice.setContentsHtml(contentsHtml);
+				notice.setContentsText(contentsText);
+			
+				noticeDao.updateNotice(notice);
+
+				result = true;
+				message = "수정되었습니다.";
+			}
+		} catch (Exception e) {
+			message = e.getMessage();
+		}
+		map.put("noticeSeq", noticeSeq);
+		map.put("result", result);
+		map.put("message", message);
+
+		JSONObject jsonObject = JSONObject.fromObject(map);
+		Response.responseWrite(res, jsonObject);
+		return null;
+	}
+
+	// 공지사항 삭제
+	@RequestMapping("/admin/notice/notice_delete_do.go")
+	public String noticeDeleteDoController(@RequestParam int noticeSeq, HttpServletResponse res) {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+
+		try {
+			// 게시물 삭제
+			noticeDao.deleteNotice(noticeSeq);
+
+			map.put("message", "게시물이 삭제되었습니다.");
+			map.put("result", true);
+		} catch (Exception e) {
+
+			map.put("message", "게시물이 삭제되지 않았습니다.\n" + e.getMessage());
+			map.put("result", false);
+		}
+
+		JSONObject jsonObject = JSONObject.fromObject(map);
+		Response.responseWrite(res, jsonObject);
+
+		return null;
+	}
+
+		
+		
+		///////////////////////////////////////////////////////////////////
+		
+		String fileJson(String photo,String thumb) throws IOException{
+		
+			JSONObject jObject = new JSONObject();
+			JSONArray jsArray = new JSONArray();
+			
+			String[] photoArr = photo.split(",");
+			String[] thumbArr = thumb.split(",");
+			String photoString="";
+			if(!photo.equals("")){
+				for (int i=0; i<photoArr.length; i++) {
+					if(photoArr[i]!=""&&thumbArr[i]!=""){
+						BufferedImage bi = ImageIO.read(new File(FILE_LOCAL_PATH + photoArr[i]));
+						int width=bi.getWidth();
+						int height=bi.getHeight();
+						
+						JSONObject jItem = new JSONObject();
+						jItem.put("type", "img");
+						jItem.put("width", width);
+						jItem.put("height", height);
+						jItem.put("thumb", thumbArr[i]);
+						jItem.put("file", photoArr[i]);	
+						jsArray.add(jItem);
+					}
+				}
+				jObject.put("items", jsArray);
+				photoString = jObject.toString();
+			}
+			
+			return photoString;
+			
+		}
+		
+	
+		
+		void filedelete(String beforefile)throws IOException{
+			
+			JSONObject fileObj = JSONObject.fromObject(beforefile);
+			JSONArray fileList = fileObj.getJSONArray("items");
+			for(int i=0;i<fileList.size();i++){
+					JSONObject fileNames=(JSONObject)fileList.get(i);
+					String fileOrg = fileNames.getString("file");
+					String fileThumb = fileNames.getString("thumb");
+					
+					FILE_LOCAL_PATH = FILE_ROOT;
+					File file = new File(FILE_LOCAL_PATH + fileOrg);
+					file.delete();
+	
+					File file2 = new File(FILE_LOCAL_PATH + fileThumb);
+					file2.delete();
+					
+		
+			}
+		}
+		
+	
+	
+}

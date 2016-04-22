@@ -1,0 +1,115 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/fmt" prefix="fmt" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+
+<script type="text/javascript">
+
+$(document).ready(function() {
+	aside.setActive(8,1);
+	
+});
+	
+	function deleteGo(missionSeq,missionCommentSeq,userId) {
+		if(confirm("Are you sure you want to delete?")) {
+			var param = {
+					missionCommentSeq	:	missionCommentSeq,
+					missionSeq : missionSeq,
+					userId : userId
+				
+			};
+			
+			$.ajax({
+				type:"POST",
+				url :"/m/mission_delete.go",
+				dataType:"json",
+				data:param,
+				success:function(json){
+					alert(json.message);
+					if (json.result) {
+					
+						if(json.type!="1"){
+							document.location.reload();
+						}else{
+							document.location.href="/admin/mission/mission.go";
+						}
+						
+					}
+				}
+			});
+		}
+		return false;
+
+	}
+
+
+</script>
+
+<style>
+</style>
+		<div style="text-align:right; margin-bottom:10px;">
+					<button type="button" class="btn"  onclick="document.location.href='/admin/mission/mission.go';" style="width:100px; background-color:#ae4;">Back</button>
+		</div>
+
+		
+			<!-- 	<form method="post" name="searchForm" id="searchForm" onsubmit="return searchList(this,1); return false;"> -->
+				<%-- <input type="hidden" name="missionSeq" value="${mission.missionSeq}">
+				<input type="hidden" name="userId" value="${USER_ID}"> --%>
+				<table class="register">
+				<tr>
+			
+					<th>Title</th><td>${mission.title}</td>
+					<th>The number of people involved</th><td>${mission.countUser}</td>
+					
+					
+				</tr>
+				<tr>
+					<th>Notifications</th><td>${fn:substring(mission.missionPushTime,0,8)}
+										[${mission.missionPushDate1!=0 ? 'Mon':'' }
+										${mission.missionPushDate2!=0 ? 'Tue':'' }
+										${mission.missionPushDate3!=0 ? 'Wen':'' }
+										${mission.missionPushDate4!=0 ? 'Thu':'' }
+										${mission.missionPushDate5!=0 ? 'Fri':'' }
+										${mission.missionPushDate6!=0 ? 'Sat':'' }
+										${mission.missionPushDate7!=0 ? 'Sun':'' }]</td>
+					
+				</tr>
+				<tr>
+				
+					<th>Mission Start Date/Mission End Date </th>
+					<td>
+						${fn:substring(mission.missionStartDate,0,16)} ~ ${fn:substring(mission.missionEndDate,0,16)}
+				
+					</td>
+					<th></th>
+					<td>
+						
+							
+							<button type="button" class="btn-blue"  onclick="document.location.href='/admin/mission/mission_edit.go?missionSeq=${mission.missionSeq}';">Modified</button>
+							<button type="button" class="btn-red" onclick="deleteGo(${mission.missionSeq},0,'${USER_ID}');">Delete</button>
+					
+					</td>
+				</tr>
+				</table>
+				<div class="bbs-contents">
+					<% pageContext.setAttribute("LF", "\n"); %>
+					<h3>${fn:replace(mission.contentsText, LF,'<br>')}</h3>
+				
+					<br>
+					
+					<c:choose>
+						<c:when test="${fileList.size() > 0 }">
+									<c:forEach var="it2" items="${fileList}" varStatus="p">
+											<td><c:if test="${it2 !='' }">
+													<c:forEach var="it3" items="${it2.items}" varStatus="s">
+														<div class="photo-talk2" style="background-image:url('${it3.file}')" onclick="pop.zoom('${it3.file}')"></div>
+													</c:forEach>
+											</c:if></td>
+									</c:forEach>
+						</c:when>
+					</c:choose>
+					
+							
+				</div>
+			<!-- 	</form> -->
+

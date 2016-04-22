@@ -1,0 +1,197 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/fmt" prefix="fmt" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+<%@ include file="/WEB-INF/views/common/header.jsp"  %>
+
+<script type="text/javascript">
+	
+	$(document).ready(function() {
+		aside.setActive(1,1);
+	});
+	
+
+ function AllergyChange(frm){
+	 
+	 $.ajax({
+			type:"POST",
+			url :"/m/user_allergy.go",
+			dataType:"json",
+			data:$('#AllergyForm').serialize(),
+			success:function(json){
+				alert(json.message);
+				if (json.result) {
+				
+					
+					document.location.reload();
+					
+					
+				}
+			}
+		});
+	 return false;
+ }
+
+</script>
+
+<style>
+.tab-list TD{
+	border-bottom: 1px solid #ddd;
+	padding: 5px;
+}
+</style>
+</head>
+<body>
+
+<%@ include file="/WEB-INF/views/admin/admin_header.jsp"  %>
+
+<section class="main-cover main-row">
+	<section id="main">
+		
+		<%@ include file="/WEB-INF/views/admin/admin_menu.jsp"  %>
+
+		<section id="contents">
+			<header class="panel">
+				 ■ Home > Member Management > Member List 
+			</header>
+		
+			<div class="contents-block" >
+			
+				<h1>Member View Details</h1>
+				
+				<%@ include file="/WEB-INF/views/admin/user/user_detail.jsp"  %>
+					
+				<div class="tab-bar">
+					<button type="button" class="tab active" onclick="document.location.href='/admin/user/user_view.go?userId=${user.userId}';"><span>Allergy</span></button>
+					<button type="button" class="tab" onclick="document.location.href='/admin/user/user_diary.go?userId=${user.userId}';"><span>Diary</span></button>
+					<button type="button" class="tab" onclick="document.location.href='/admin/user/user_mission.go?userId=${user.userId}';"><span>Participation of Mission</span></button>
+					
+				</div>				
+				<form id="AllergyForm" onsubmit="return AllergyChange(this);return false;">
+				<input type="hidden" name="userId" value="${user.userId}">
+				<ul style="padding-top:10px;">
+					
+					<table class="list2" >
+						<colgroup>
+							
+							<col width="10%">
+							<col width="*">
+									
+						</colgroup>
+
+						<tbody class="rl">
+							<tr>
+								<td><b>Genitourinary</b></td>
+								
+								<td><input type="checkbox" name="frequentUrination" value="1" ${ua.frequentUrination==1 ? 'checked=/"checked/"':'' }>Frequent urination
+									<input type="checkbox" name="hotUrine" value="1" ${ua.hotUrine==1 ? 'checked=/"checked/"':'' }>Hot urine
+									<input type="checkbox" name="urinaryTractInfection" value="1" ${ua.urinaryTractInfection==1 ? 'checked=/"checked/"':'' }>Urinary Tract Infection
+									<input type="checkbox" name="vaginitis" value="1" ${ua.vaginitis==1 ? 'checked=/"checked/"':'' }>Vaginitis
+								</td>
+							</tr>
+							<tr>
+								<td><b>Skin</b></td>
+								<td><input type="checkbox" name="pruritus" value="1" ${ua.pruritus==1 ? 'checked=/"checked/"':'' }>Pruritus
+									<input type="checkbox" name="acne" value="1" ${ua.acne==1 ? 'checked=/"checked/"':'' }>Acne
+									<input type="checkbox" name="skinRash" value="1" ${ua.skinRash==1 ? 'checked=/"checked/"':'' }>Skin Rash
+									<input type="checkbox" name="hives" value="1" ${ua.hives==1 ? 'checked=/"checked/"':'' }>Hives
+									<input type="checkbox" name="pallorDry" value="1" ${ua.pallorDry==1 ? 'checked=/"checked/"':'' }>Pallor and Dry
+									<input type="checkbox" name="crack" value="1" ${ua.crack==1 ? 'checked=/"checked/"':'' }>Hair or Fingernail Crack
+								</td>
+							</tr>
+							<tr>
+								<td><b>Recognition and psychological aspects</b></td>
+								<td><input type="checkbox" name="whim" value="1" ${ua.whim==1 ? 'checked=/"checked/"':'' }>Whim
+									<input type="checkbox" name="anger" value="1" ${ua.anger==1 ? 'checked=/"checked/"':'' }>Anger
+									<input type="checkbox" name="stress" value="1" ${ua.stress==1 ? 'checked=/"checked/"':'' }>Stress
+									<input type="checkbox" name="depression" value="1" ${ua.depression==1 ? 'checked=/"checked/"':'' }>Depression
+									<input type="checkbox" name="craving" value="1" ${ua.craving==1 ? 'checked=/"checked/"':'' }>Craving
+									<input type="checkbox" name="voracity" value="1" ${ua.voracity==1 ? 'checked=/"checked/"':'' }>Voracity
+									<input type="checkbox" name="tiredness" value="1" ${ua.tiredness==1 ? 'checked=/"checked/"':'' }>Tiredness
+									<input type="checkbox" name="decreasedConcentration" value="1" ${ua.decreasedConcentration==1 ? 'checked=/"checked/"':'' }>Decreased Concentration
+									<input type="checkbox" name="hypersensitivity" value="1" ${ua.hypersensitivity==1 ? 'checked=/"checked/"':'' }>Hypersensitivity
+									<input type="checkbox" name="severeEmotional" value="1" ${ua.severeEmotional==1 ? 'checked=/"checked/"':'' }>Severe Emotional
+								</td>
+							</tr>
+							<tr>
+								<td><b>Etc</b></td>
+								<td><input type="checkbox" name="severeWeight" value="1" ${ua.severeWeight==1 ? 'checked=/"checked/"':'' }>Severe Weight
+									<input type="checkbox" name="eczema" value="1" ${ua.eczema==1 ? 'checked=/"checked/"':'' }>Eczema
+									<input type="checkbox" name="rash" value="1" ${ua.rash==1 ? 'checked=/"checked/"':'' }>Rash
+									<input type="checkbox" name="pimple" value="1" ${ua.pimple==1 ? 'checked=/"checked/"':'' }>Pimple
+									<input type="checkbox" name="sweat" value="1" ${ua.sweat==1 ? 'checked=/"checked/"':'' }>Sweat
+									<input type="checkbox" name="muscleTremors" value="1" ${ua.muscleTremors==1 ? 'checked=/"checked/"':'' }>Muscle tremors
+									<input type="checkbox" name="musclePain" value="1" ${ua.musclePain==1 ? 'checked=/"checked/"':'' }>Muscle Pain
+									<input type="checkbox" name="lessMuscle" value="1" ${ua.lessMuscle==1 ? 'checked=/"checked/"':'' }>Less Muscle
+									<input type="checkbox" name="hyperglycemia" value="1" ${ua.hyperglycemia==1 ? 'checked=/"checked/"':'' }>Hyperglycemia
+									<input type="checkbox" name="hypoglycemia" value="1" ${ua.hypoglycemia==1 ? 'checked=/"checked/"':'' }>Hypoglycemia
+								</td>
+							</tr>
+							<tr>
+								<td><b>Head</b></td>
+								<td><input type="checkbox" name="headache" value="1" ${ua.headache==1 ? 'checked=/"checked/"':'' }>Headache
+									<input type="checkbox" name="dizziness" value="1" ${ua.dizziness==1 ? 'checked=/"checked/"':'' }>Dizziness
+									<input type="checkbox" name="rhinitis" value="1" ${ua.rhinitis==1 ? 'checked=/"checked/"':'' }>Rhinitis
+									<input type="checkbox" name="migraine" value="1" ${ua.migraine==1 ? 'checked=/"checked/"':'' }>Migraine
+									<input type="checkbox" name="tiredness2" value="1" ${ua.tiredness2==1 ? 'checked=/"checked/"':'' }>Tiredness2
+									
+								</td>
+							</tr>
+							<tr>
+								<td><b>Eyes, ears, throat and respiratory system</b></td>
+								<td><input type="checkbox" name="earInfections" value="1" ${ua.earInfections==1 ? 'checked=/"checked/"':'' }>Ear Infections
+									<input type="checkbox" name="cloggedNose" value="1" ${ua.cloggedNose==1 ? 'checked=/"checked/"':'' }>Clogged Nose
+									<input type="checkbox" name="soreThroat" value="1" ${ua.soreThroat==1 ? 'checked=/"checked/"':'' }>Sore Throat
+									<input type="checkbox" name="sinusitis" value="1" ${ua.sinusitis==1 ? 'checked=/"checked/"':'' }>Sinusitis
+									<input type="checkbox" name="cough" value="1" ${ua.cough==1 ? 'checked=/"checked/"':'' }>Cough
+									<input type="checkbox" name="eyelid" value="1" ${ua.eyelid==1 ? 'checked=/"checked/"':'' }>Eyelid
+									<input type="checkbox" name="cold" value="1" ${ua.cold==1 ? 'checked=/"checked/"':'' }>Cold
+									
+								</td>	
+							</tr>
+							<tr>
+								<td><b>Skin Rash</b></td>
+								<td><input type="checkbox" name="asthma" value="1" ${ua.asthma==1 ? 'checked=/"checked/"':'' }>Asthma
+									<input type="checkbox" name="arrhythmias" value="1" ${ua.arrhythmias==1 ? 'checked=/"checked/"':'' }>Arrhythmias
+									<input type="checkbox" name="wheeze" value="1" ${ua.wheeze==1 ? 'checked=/"checked/"':'' }>Wheeze
+									<input type="checkbox" name="indigestion" value="1" ${ua.indigestion==1 ? 'checked=/"checked/"':'' }>Indigestion
+									<input type="checkbox" name="burp" value="1" ${ua.burp==1 ? 'checked=/"checked/"':'' }>Burp
+									<input type="checkbox" name="throwUp" value="1" ${ua.throwUp==1 ? 'checked=/"checked/"':'' }>Throw up
+									<input type="checkbox" name="irritableBowelSyndrome" value="1" ${ua.irritableBowelSyndrome==1 ? 'checked=/"checked/"':'' }>Irritable Bowel Syndrome
+									<input type="checkbox" name="diarrhea" value="1" ${ua.diarrhea==1 ? 'checked=/"checked/"':'' }>Diarrhea	
+									<input type="checkbox" name="constipation" value="1" ${ua.constipation==1 ? 'checked=/"checked/"':'' }>Constipation
+									<input type="checkbox" name="abdomenGas" value="1" ${ua.abdomenGas==1 ? 'checked=/"checked/"':'' }>Abdomen gas
+									<input type="checkbox" name="ulcer" value="1" ${ua.ulcer==1 ? 'checked=/"checked/"':'' }>Ulcer
+									<input type="checkbox" name="stomachCramps" value="1" ${ua.stomachCramps==1 ? 'checked=/"checked/"':'' }>Stomach Cramps	
+									<input type="checkbox" name="anusItch" value="1" ${ua.anusItch==1 ? 'checked=/"checked/"':'' }>Anus Itch
+									<input type="checkbox" name="stomachache" value="1" ${ua.stomachache==1 ? 'checked=/"checked/"':'' }>Stomachache
+									<input type="checkbox" name="babyStomachache" value="1" ${ua.babyStomachache==1 ? 'checked=/"checked/"':'' }>Baby stomachache
+								</td>
+								
+							</tr>
+							<tr>
+								<td><b>Muscles and joints</b></td>
+								<td><input type="checkbox" name="myalgia" value="1" ${ua.myalgia==1 ? 'checked=/"checked/"':'' }>Myalgia
+									<input type="checkbox" name="arthralgia" value="1" ${ua.arthralgia==1 ? 'checked=/"checked/"':'' }>Arthralgia
+									<input type="checkbox" name="arthritis" value="1" ${ua.arthritis==1 ? 'checked=/"checked/"':'' }>Arthritis
+								</td>
+								
+							</tr>	
+								
+						</tbody>
+					</table>
+						<button type="submit" class="btn-blue">Save</button>		
+					</ul> 
+					</form>
+				
+					
+				
+			</div>
+		</section>
+	</section>
+</section>
+
+<%@ include file="/WEB-INF/views/admin/admin_footer.jsp"  %>
+
+</body>
+</html>

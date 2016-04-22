@@ -1,0 +1,16 @@
+# config.properties
+mssql.driverClassName = net.sourceforge.jtds.jdbc.Driver
+
+#mssql.url = jdbc:jtds:sqlserver://218.234.17.164:1433;tds=8.0;lastupdatecount=true;DatabaseName=TheClinic
+#mssql.username = promise
+#mssql.password = facepro$$$
+
+mssql.url = jdbc:jtds:sqlserver://218.234.17.222:1433;tds=8.0;lastupdatecount=true;DatabaseName=TheClinic
+mssql.username = mars
+mssql.password = shak05em03
+
+file.maxSize = 1000
+file.root = D:/00_FILE_DATA/TheClinic
+
+page.itemCountPerPage = 30
+page.pageCountPerPaging = 10

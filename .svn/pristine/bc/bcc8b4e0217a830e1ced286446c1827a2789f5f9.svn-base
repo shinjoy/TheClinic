@@ -1,0 +1,13 @@
+<style type="text/css"> 
+<!--
+A:link {color: #333333; text-decoration: none}
+A:active {color: #333333; text-decoration: none}
+A:visited {color: #333333; text-decoration: none}
+A:hover {color: #333333; text-decoration: underline}
+
+TR  {font-size : 9pt; font-family:µ¸¿ò;font-face : µ¸¿ò;color:#555555; letter-spacing : -0.5px}
+TD  {font-size : 9pt; font-family:µ¸¿ò;font-face : µ¸¿ò;color:#555555; letter-spacing : -0.5px; line-height:150%}
+.txt_s { font-family:µ¸¿ò; font-size: 8pt; color: #555555; line-height: 150%; letter-spacing: -0.5px }
+select {font-family : "µ¸¿ò";font-face : µ¸¿ò; color:#2E2E2E; font-size: 8pt; letter-spacing : -1px;}
+-->
+</style>

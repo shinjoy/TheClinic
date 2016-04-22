@@ -1,0 +1,28 @@
+package kr.nomad.mars.dto;
+
+public class Data {
+
+	int dataSeq = 0;
+	String bloodgroupsKind = "";
+	String comment = "";
+	public int getDataSeq() {
+		return dataSeq;
+	}
+	public void setDataSeq(int dataSeq) {
+		this.dataSeq = dataSeq;
+	}
+	public String getBloodgroupsKind() {
+		return bloodgroupsKind;
+	}
+	public void setBloodgroupsKind(String bloodgroupsKind) {
+		this.bloodgroupsKind = bloodgroupsKind;
+	}
+	public String getComment() {
+		return comment;
+	}
+	public void setComment(String comment) {
+		this.comment = comment;
+	}
+
+	
+}
